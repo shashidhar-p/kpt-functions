@@ -17,11 +17,9 @@ package main
 import (
 	"context"
 	"os"
-	"fmt"
 
 	"github.com/GoogleContainerTools/kpt-functions-sdk/go/fn"
 	
-	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
 
 var _ fn.Runner = &YourFunction{}
@@ -32,14 +30,7 @@ type YourFunction struct {
 	FnConfigInt  int
 	FnConfigFoo  string
 }
-type NetworkAttachmentDefinition struct {
-	ApiVersion string `yaml:"apiVersion"`
-	Kind string `yaml:"kind"`
-	ObjectMeta yaml.ObjectMeta `yaml:"metadata"`
-	Spec struct {
-		Config string `yaml:"config"`
-	}
-}
+
 // Run is the main function logic.
 // `items` is parsed from the STDIN "ResourceList.Items".
 // `functionConfig` is from the STDIN "ResourceList.FunctionConfig". The value has been assigned to the r attributes
@@ -49,36 +40,18 @@ func (r *YourFunction) Run(ctx *fn.Context, functionConfig *fn.KubeObject, items
     for _, kubeObject := range items {
         if kubeObject.IsGVK("", "v1", "ConfigMap") {	
 			data,_,_:= kubeObject.NestedStringMap("data")
-			nad := NetworkAttachmentDefinition{
-				ObjectMeta: yaml.ObjectMeta{
-					NameMeta: yaml.NameMeta{
-						Name: data["netAttachName"],
-					},
-				},
-				ApiVersion: "k8s.cni.cncf.io/v1",
-				Kind: "NetworkAttachmentDefinition",
-				Spec: struct {
-					Config string `yaml:"config"`
-				}{
-					Config: data["config"],
-				},
-			}
+			config:= data["config"]
 
-			file,err:= os.Create("shashi-nad.yaml")
-			if err != nil {
-				fmt.Printf("error creating YAML file: %v\n", err)
-				return false
-			}
-			defer file.Close()
-
-			err = yaml.NewEncoder(file).Encode(nad)
-			if err != nil {
-				fmt.Printf("error encoding YAML: %v\n", err)
-			}
-
+			// Set the kubeobject
+			kubeObject.SetAPIVersion("k8s.cni.cncf.io/v1")
+			kubeObject.SetKind("NetworkAttachmentDefinition")
+			kubeObject.SetNamespace("test")
+			kubeObject.SetName(data["netAttachName"])
+			kubeObject.SetNestedField(&config,"spec","config")
+			kubeObject.RemoveNestedField("data")
         }
     }
-	*results = append(*results, fn.GeneralResult("Add config.kubernetes.io/managed-by=kpt to all `Deployment` resources", fn.Info))
+	*results = append(*results, fn.GeneralResult("Created NetworkAttachmentDefinition from configMap in resources.yaml", fn.Info))
 	return true
 }
 

@@ -11,28 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: nad-config
-  namespace: default
-data:
-  netAttachName: macvlan-net
-  config: |
-    {
-      "cniVersion": "0.3.1",
-      "name": "eth15",
-      "type": "macvlan",
-      "master": "eth0",
-      "mode": "bridge",
-      "ipam": {
-        "type": "host-local",
-        "subnet": "192.168.1.0/24",
-        "rangeStart": "192.168.1.200",
-        "rangeEnd": "192.168.1.216",
-        "routes": [
-          {"dst": "0.0.0.0/0"}
-        ],
-        "gateway": "192.168.1.1"
-      }
-    }
+
+FROM golang:1.19-alpine3.15
+ENV CGO_ENABLED=0
+WORKDIR /go/src/
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN go build -o /usr/local/bin/function ./
+FROM gcr.io/distroless/static:latest
+COPY --from=0 /usr/local/bin/function /usr/local/bin/function
+ENTRYPOINT ["function"]

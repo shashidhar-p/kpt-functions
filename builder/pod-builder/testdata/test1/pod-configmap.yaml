@@ -4,7 +4,7 @@ metadata:
   name: pod-config
   namespace: default
 data:
-  podName: example-pod-shashi
+  podName: example-pod-testing
   containerName: example-container
   image: nginx:latest
   netAttachName: macvlan-shashidhar
