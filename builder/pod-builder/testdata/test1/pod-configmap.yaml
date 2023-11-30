@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: 
+  name: pod-config
+  namespace: default
+data:
+  podName: example-pod-shashi
+  containerName: example-container
+  image: nginx:latest
+  netAttachName: macvlan-shashidhar
+  
