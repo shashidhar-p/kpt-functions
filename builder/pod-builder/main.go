@@ -55,7 +55,7 @@ func (r *YourFunction) Run(ctx *fn.Context, functionConfig *fn.KubeObject, items
 				arrMaps:= []map[string]string{
 					{"name":"test-container","image":data["image"]},
 				}
-				kubeObject.SetNestedField(arrMaps,"spec","container")
+				kubeObject.SetNestedField(arrMaps,"spec","containers")
 				kubeObject.RemoveNestedField("data")
 				hasChanged=true
 			}
