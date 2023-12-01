@@ -3,12 +3,8 @@ kind: Kptfile
 metadata:
   name: nad-builder
 info:
-  description: Generates NAD from configMap
+  description: Generates NAD and POD from configMap
 pipeline:
   mutators:
-    - image: shashidharpatil/kptfunctions:v11
-      configMap:
-        resourceName: nad-config
-    - image: shashidharpatil/pod-builder:v11
-      configMap:
-        resourceName: pod-config
+    - image: shashidharpatil/build-nad:v1
+    - image: shashidharpatil/build-pod:v1

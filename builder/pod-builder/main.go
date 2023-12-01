@@ -21,13 +21,9 @@ import (
 	"github.com/GoogleContainerTools/kpt-functions-sdk/go/fn"
 )
 
-var _ fn.Runner = &YourFunction{}
+var _ fn.Runner = &PodFunction{}
 
-// TODO: Change to your functionConfig "Kind" name.
-type YourFunction struct {
-	FnConfigBool bool
-	FnConfigInt  int
-	FnConfigFoo  string
+type PodFunction struct {
 	data map[string]string
 }
 
@@ -35,7 +31,7 @@ type YourFunction struct {
 // `items` is parsed from the STDIN "ResourceList.Items".
 // `functionConfig` is from the STDIN "ResourceList.FunctionConfig". The value has been assigned to the r attributes
 // `results` is the "ResourceList.Results" that you can write result info to.
-func (r *YourFunction) Run(ctx *fn.Context, functionConfig *fn.KubeObject, items fn.KubeObjects, results *fn.Results) bool {
+func (r *PodFunction) Run(ctx *fn.Context, functionConfig *fn.KubeObject, items fn.KubeObjects, results *fn.Results) bool {
 	nadConfig:= ""
 	hasChanged := false
 	for _, kubeObject := range items {
@@ -43,11 +39,19 @@ func (r *YourFunction) Run(ctx *fn.Context, functionConfig *fn.KubeObject, items
 			nadConfig=kubeObject.GetName()
 		}
 	}
+	if nadConfig == ""{
+		*results = append(*results, fn.GeneralResult("NetworkAttachmentDefinition not found", fn.Error))
+		return false
+	}
     for _, kubeObject := range items {
-		funConf,_,_:= functionConfig.NestedStringMap("data")
+		// Check for kind: ConfigMap
         if kubeObject.IsGVK("", "v1", "ConfigMap") {
+			// Fetch Data field from configMap	
 			data,_,_:= kubeObject.NestedStringMap("data")
-			if(kubeObject.GetName() == funConf["resourceName"]){
+			//Check image field exists
+			_, ok := data["image"]
+			if ok {
+				// Set the kubeobject
 				kubeObject.SetAPIVersion("v1")
 				kubeObject.SetKind("Pod")
 				kubeObject.SetAnnotation("k8s.v1.cni.cncf.io/networks",nadConfig)
@@ -60,19 +64,18 @@ func (r *YourFunction) Run(ctx *fn.Context, functionConfig *fn.KubeObject, items
 				hasChanged=true
 			}
 		}
-		
     }
-	if(hasChanged){
+	if hasChanged {
 		*results = append(*results, fn.GeneralResult("Created POD from configMap", fn.Info))
 		return true
 	}else {
-		*results = append(*results, fn.GeneralResult("No resource found with the given name", fn.Error))
+		*results = append(*results, fn.GeneralResult("Failed to create POD", fn.Error))
 		return false
 	}
 }
 
 func main() {
-	runner := fn.WithContext(context.Background(), &YourFunction{})
+	runner := fn.WithContext(context.Background(), &PodFunction{})
 	if err := fn.AsMain(runner); err != nil {
 		os.Exit(1)
 	}

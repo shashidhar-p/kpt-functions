@@ -17,18 +17,15 @@ package main
 import (
 	"context"
 	"os"
+	"encoding/json"
 
 	"github.com/GoogleContainerTools/kpt-functions-sdk/go/fn"
 	
 )
 
-var _ fn.Runner = &YourFunction{}
+var _ fn.Runner = &NadFunction{}
 
-// TODO: Change to your functionConfig "Kind" name.
-type YourFunction struct {
-	FnConfigBool bool
-	FnConfigInt  int
-	FnConfigFoo  string
+type NadFunction struct {
 	data map[string]string
 }
 
@@ -36,15 +33,24 @@ type YourFunction struct {
 // `items` is parsed from the STDIN "ResourceList.Items".
 // `functionConfig` is from the STDIN "ResourceList.FunctionConfig". The value has been assigned to the r attributes
 // `results` is the "ResourceList.Results" that you can write result info to.
-func (r *YourFunction) Run(ctx *fn.Context, functionConfig *fn.KubeObject, items fn.KubeObjects, results *fn.Results) bool {
+func (r *NadFunction) Run(ctx *fn.Context, functionConfig *fn.KubeObject, items fn.KubeObjects, results *fn.Results) bool {
 	hasChanged := false
     for _, kubeObject := range items {
-        if kubeObject.IsGVK("", "v1", "ConfigMap") {	
+		// Check for kind: ConfigMap
+        if kubeObject.IsGVK("", "v1", "ConfigMap") {
+			var configContent map[string]interface{}
+			// Fetch Data field from configMap	
 			data,_,_:= kubeObject.NestedStringMap("data")
-			config:= data["config"]
-
-			funConf,_,_:= functionConfig.NestedStringMap("data")
-			if(kubeObject.GetName() == funConf["resourceName"]){
+			config, ok := data["config"]	
+			if !ok {
+				continue
+			}		
+			err := json.Unmarshal([]byte(config), &configContent)
+			if err != nil {
+				return false			
+			}
+			// Check for NAD type: macvlan
+			if(configContent["type"] == "macvlan"){
 				// Set the kubeobject
 				kubeObject.SetAPIVersion("k8s.cni.cncf.io/v1")
 				kubeObject.SetKind("NetworkAttachmentDefinition")
@@ -55,18 +61,17 @@ func (r *YourFunction) Run(ctx *fn.Context, functionConfig *fn.KubeObject, items
 			}
         }
     }
-	if(hasChanged){
+	if hasChanged {
 		*results = append(*results, fn.GeneralResult("Created NetworkAttachmentDefinition from configMap", fn.Info))
 		return true
 	}else {
-		*results = append(*results, fn.GeneralResult("No resource found with the given name", fn.Error))
+		*results = append(*results, fn.GeneralResult("Failed to create NetworkAttachmentDefinition", fn.Error))
 		return false
 	}
-	
 }
 
 func main() {
-	runner := fn.WithContext(context.Background(), &YourFunction{})
+	runner := fn.WithContext(context.Background(), &NadFunction{})
 	if err := fn.AsMain(runner); err != nil {
 		os.Exit(1)
 	}
