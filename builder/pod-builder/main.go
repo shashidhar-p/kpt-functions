@@ -17,10 +17,8 @@ package main
 import (
 	"context"
 	"os"
-	"fmt"
 
 	"github.com/GoogleContainerTools/kpt-functions-sdk/go/fn"
-	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
 
 var _ fn.Runner = &YourFunction{}
@@ -30,18 +28,7 @@ type YourFunction struct {
 	FnConfigBool bool
 	FnConfigInt  int
 	FnConfigFoo  string
-}
-
-type Pod struct {
-	ApiVersion string `yaml:"apiVersion"`
-	Kind string `yaml:"kind"`
-	ObjectMeta yaml.ObjectMeta `yaml:"metadata"`
-	Spec struct {
-		Containers []struct{
-			Name string `yaml:"name"`
-			Image string `yaml:"image"`
-		} `yaml:"containers"`
-	}
+	data map[string]string
 }
 
 // Run is the main function logic.
@@ -49,57 +36,39 @@ type Pod struct {
 // `functionConfig` is from the STDIN "ResourceList.FunctionConfig". The value has been assigned to the r attributes
 // `results` is the "ResourceList.Results" that you can write result info to.
 func (r *YourFunction) Run(ctx *fn.Context, functionConfig *fn.KubeObject, items fn.KubeObjects, results *fn.Results) bool {
-	// TODO: Write your code.
+	nadConfig:= ""
+	hasChanged := false
 	for _, kubeObject := range items {
-        if kubeObject.IsGVK("", "v1", "ConfigMap") {
-			data,_,_:= kubeObject.NestedStringMap("data")
-			pod := Pod{
-				ApiVersion: "v1",
-				Kind:       "Pod",
-				ObjectMeta: yaml.ObjectMeta{
-					NameMeta: yaml.NameMeta{
-						Name: data["podName"],
-					},
-					Annotations:map[string]string{
-						"k8s.v1.cni.cncf.io/networks": data["netAttachName"],
-					},
-				},
-				Spec: struct {
-					Containers []struct {
-						Name  string `yaml:"name"`
-						Image string `yaml:"image"`
-					} `yaml:"containers"`
-				}{
-					Containers: []struct {
-						Name  string `yaml:"name"`
-						Image string `yaml:"image"`
-					}{
-						{
-							Name:  data["containerName"],
-							Image: data["image"],
-						},
-					},
-				},
-			}
-
-			file, err := os.Create("shashi-pod.yaml")
-			if err != nil {
-				fmt.Printf("error creating YAML file: %v\n", err)
-				return false
-			}
-			defer file.Close()
-		
-			err = yaml.NewEncoder(file).Encode(pod)
-			if err != nil {
-				fmt.Printf("error encoding YAML: %v\n", err)
-				return false
-			}
-		
+		if kubeObject.IsGVK("k8s.cni.cncf.io","v1","NetworkAttachmentDefinition"){
+			nadConfig=kubeObject.GetName()
 		}
 	}
-
-
-	return true
+    for _, kubeObject := range items {
+		funConf,_,_:= functionConfig.NestedStringMap("data")
+        if kubeObject.IsGVK("", "v1", "ConfigMap") {
+			data,_,_:= kubeObject.NestedStringMap("data")
+			if(kubeObject.GetName() == funConf["resourceName"]){
+				kubeObject.SetAPIVersion("v1")
+				kubeObject.SetKind("Pod")
+				kubeObject.SetAnnotation("k8s.v1.cni.cncf.io/networks",nadConfig)
+				kubeObject.SetName(data["podName"])
+				arrMaps:= []map[string]string{
+					{"name":"test-container","image":data["image"]},
+				}
+				kubeObject.SetNestedField(arrMaps,"spec","container")
+				kubeObject.RemoveNestedField("data")
+				hasChanged=true
+			}
+		}
+		
+    }
+	if(hasChanged){
+		*results = append(*results, fn.GeneralResult("Created POD from configMap", fn.Info))
+		return true
+	}else {
+		*results = append(*results, fn.GeneralResult("No resource found with the given name", fn.Error))
+		return false
+	}
 }
 
 func main() {

@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-apiVersion: v1
-kind: ConfigMap
-metadata: 
-  name: pod-config
-  namespace: default
-data:
-  podName: example-pod
-  image: nginx:latest
-
+FROM golang:1.19-alpine3.15
+ENV CGO_ENABLED=0
+WORKDIR /go/src/
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN go build -o /usr/local/bin/function ./
+FROM gcr.io/distroless/static:latest
+COPY --from=0 /usr/local/bin/function /usr/local/bin/function
+ENTRYPOINT ["function"]
